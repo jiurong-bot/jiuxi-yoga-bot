@@ -4,86 +4,60 @@ require('dotenv').config();
 
 const app = express();
 
+// 檢查環境變數
+if (!process.env.LINE_CHANNEL_ACCESS_TOKEN || !process.env.LINE_CHANNEL_SECRET) {
+  console.error('Missing LINE credentials in environment variables');
+  process.exit(1);
+}
+
 const client = new line.Client({
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
   channelSecret: process.env.LINE_CHANNEL_SECRET
 });
 
-const bookings = [];
-const courses = {
-  '1': { name: '朝陽瑜伽', duration: 45, price: 300, capacity: 15 },
-  '2': { name: '寧靜冥想', duration: 60, price: 350, capacity: 12 },
-  '3': { name: '力量瑜伽', duration: 50, price: 380, capacity: 15 },
-  '4': { name: '柔和伸展', duration: 45, price: 300, capacity: 15 },
-  '5': { name: '心靈醒覺', duration: 75, price: 400, capacity: 15 },
-  '6': { name: '親子瑜伽', duration: 40, price: 250, capacity: 10 }
-};
-
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.post('/webhook', line.middleware({ channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN }), (req, res) => {
+// 健康檢查
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: '九容瑜伽 LINE Bot 運行中' });
+});
+
+// Webhook
+app.post('/webhook', line.middleware({ 
+  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
+  channelSecret: process.env.LINE_CHANNEL_SECRET 
+}), (req, res) => {
   Promise.all(req.body.events.map(handleEvent))
     .then((result) => res.json(result))
     .catch((err) => {
-      console.error(err);
+      console.error('Error:', err);
       res.status(500).end();
     });
 });
 
 async function handleEvent(event) {
-  if (event.type !== 'message' || event.message.type !== 'text') {
-    return Promise.resolve(null);
-  }
+  if (event.type !== 'message') return Promise.resolve(null);
+  if (event.message.type !== 'text') return Promise.resolve(null);
 
-  const userMessage = event.message.text;
+  const text = event.message.text;
 
-  if (userMessage === '查看課程') {
-    return handleViewCourses(event.replyToken);
-  } else if (userMessage === '立即預約') {
-    return handleQuickBooking(event.replyToken);
-  } else {
+  console.log(`收到訊息: ${text}`);
+
+  if (text === '查看課程') {
     return client.replyMessage(event.replyToken, {
       type: 'text',
-      text: '👋 歡迎來到九容瑜伽！\n請選擇：',
-      quickReply: {
-        items: [
-          { type: 'action', action: { type: 'message', label: '查看課程', text: '查看課程' } },
-          { type: 'action', action: { type: 'message', label: '立即預約', text: '立即預約' } }
-        ]
-      }
+      text: '📚 九容瑜伽課程\n\n1️⃣ 朝陽瑜伽 - 45分鐘 $300\n2️⃣ 寧靜冥想 - 60分鐘 $350\n3️⃣ 力量瑜伽 - 50分鐘 $380\n4️⃣ 柔和伸展 - 45分鐘 $300\n5️⃣ 心靈醒覺 - 75分鐘 $400\n6️⃣ 親子瑜伽 - 40分鐘 $250'
     });
   }
-}
 
-function handleViewCourses(replyToken) {
-  const courseList = Object.entries(courses)
-    .map(([id, course]) => `${course.name} - ${course.duration}分鐘 $${course.price}`)
-    .join('\n');
-  
-  return client.replyMessage(replyToken, {
+  return client.replyMessage(event.replyToken, {
     type: 'text',
-    text: `📚 九容瑜伽課程:\n\n${courseList}\n\n輸入「立即預約」開始預約！`
+    text: '👋 歡迎來到九容瑜伽！輸入「查看課程」查看所有課程。'
   });
 }
 
-function handleQuickBooking(replyToken) {
-  const items = Object.entries(courses).map(([id, course]) => ({
-    type: 'action',
-    action: { type: 'message', label: course.name, text: `預約 ${course.name}` }
-  }));
-
-  return client.replyMessage(replyToken, {
-    type: 'text',
-    text: '選擇要預約的課程：',
-    quickReply: { items }
-  });
-}
-
-app.get('/', (req, res) => {
-  res.json({ message: '九容瑜伽 LINE Bot 正在運行' });
-});
-
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`LINE Bot 在 port ${PORT} 上運行`);
 });
